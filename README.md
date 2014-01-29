@@ -1,4 +1,4 @@
 wos
 ===
 
-Bare minimum of implementation for x86
+Bare minimum OS implementation for x86

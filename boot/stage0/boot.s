@@ -1,35 +1,24 @@
 
-; TODO: 
-;   NEED TO READ FAT!
-;        - how large is it anyway?
-;           9 x 512 = 0x1200
-;   Understand fat - how files are laid out
-;   Read full file from fat
-;   Jum to it
-;   Have that file print a string
-;
-
 ; Stage 0 bootloader
 ; Wiktor Lukasik (wiktor@lukasik.org)
 ;
 ; ==============================================================================
 ; MEMORY MAP
 ; ------------------------------------------------------------------------------
-; 0x7E00    - BOOT SECTOR END
-; 0x7C00    - BOOT SECTOR BEGIN
-; 0x7C00    - FAT12 ROOT TABLE END
-; 0x6000    - FAT12 ROOT TABLE BEGIN
-; 0x5000    - REAL-MODE STACK TOP
-; 0x4000    - REAL-MODE STACK BOTTOM
-; 0x1900    - END FAT
-; 0x0700    - START FAT
-; 0x0700    - FLOPPY SECTOR END
-; 0x0500    - FLOPPY SECTOR BEGIN
+; 0x9200    - STAGE1
+; 0x7E00    - BOOT SECTOR
+; 0x7C00    - GAP
+; 0x5000    - STACK
+; 0x3300    - FAT12
+; 0x2100    - ROOT TABLE END
+; 0x0500    - ROOT TABLE BEGIN
 ;
 ; ==============================================================================
 ; HELPFUL LINKS:
 ; ------------------------------------------------------------------------------
 ; int 13h interrupt list - http://en.wikipedia.org/wiki/INT_13H
+; x86 instruction set - http://x86.renejeschke.de/
+; memory map - http://wiki.osdev.org/Memory_Map_(x86)
 ;
 ; ==============================================================================
 ; DESCRIPTION
@@ -44,16 +33,22 @@
 ;
 ; stage1 will attempt to perform some setup so we can boot into kernel proper.
 ;
-; WORKFLOW for stage0:
-; 1. Set stack: top=0x5000, size=0x1000 (0x4000-0x5000)
-; 1. Load fat12 root table at 0x6000-0x7C00 (size = bytes per root entry * root entries = 32 * 224 = 7168 = 0x1c00)
-; 2. Iterate through list of files and find stage1
-; 3. Load stage1 (TODO: where?)
-; 4. Jump into stage1
+%macro save_ds_es_cx 0
+    push ds
+    push es
+    push cx
+%endmacro  
+
+%macro  restore_cx_es_ds 0
+    pop cx
+    pop es
+    pop ds
+%endmacro
 
 org 0x7c00
 bits	16
 
+; Local constants
 bytesPerRootEntry   equ 0x20
 rootDirSegmentStart equ 0x50
 stackSegmentStart   equ 0x500
@@ -65,12 +60,10 @@ stage1sector        equ 0x0
 ; BPB to the actuall code
 start:	jmp loader
 
-; Now we need to fill space up to 11th byte
-TIMES 0Bh-$+start DB 0
-; Optionally, this is where OEM name sits...
-;bsOEM			DB "dasBOT  "
+; Name of the system
+bsOEM			DB "WOS1    "
 
-; Define some info for the diskette and fat12
+; BIOS parameter block
 bpbBytesPerSector: 	    DW 512
 bpbSectorsPerCluster: 	DB 1
 bpbReservedSectors: 	DW 1
@@ -91,203 +84,90 @@ bsVolumeLabel: 	        DB "VOSBOOTDISK"
 bsFileSystem: 	        DB "FAT12   "
 fileName		        DB "...........", 0
 stage1Name              DB "STAGE1  BIN", 0
-stage1Found             DB "F", 0
-stage1NotFound          DB "NF", 0
-booting                 DB "B", 0
+
 section .text
-
-;%include 'stage0/util.s'
-
-; Compares two file names, one from root table, other one from fileName
-filename_compare:
-    push    ebp
-    mov     ebp, esp
-
-;    push    PRINTNL
-;    mov     si, fileName
-;    call    printn
-;    add     sp, 2
-
-    ; Compare strings in DS:SI and ES:DI
-    mov     cx, 11          ; Compare 11 chars - needed by repe
-    xor     ax, ax          
-    mov     ds, ax          ; no need for values in segments ds and es
-    mov     es, ax
-    mov     si, fileName    ; set source and destination for string comparison
-    mov     di, stage1Name
-    repe    cmpsb           ; compare strings
-
-    jnz      .not_equal
-    
- ;   push    PRINTNL         ; found file...
- ;   mov     si, stage1Found
- ;   call    printn
- ;   add     sp, 2
-   
-    mov     word[stage1sector], 4321
-    jmp     .return
-
-.not_equal:                 ; did not find file
-    ;push    PRINTNL
-    ;mov     si, stage1NotFound
-    ;call    printn
-    ;add     sp, 2
-
-.return:
-    pop     ebp
-    ret
-
-root_loading:
-; GET SIZE OF ROOT DIRECTORY (in # of sectors, store in CX)
-; size of root = (0x20 (32) bytes per root entry * number of root entries) / 512 bytes in a sector 
-; size of root = (32 * 224) / 512 = 14 sectors
-.size_root:
-    xor     ax, ax  
-    xor     cx, cx
-    xor     dx, dx
-    mov     ax, bytesPerRootEntry
-    mul     word [bpbRootEntries]
-    div     word [bpbBytesPerSector]
-    xchg    ax, cx  ; CX should be 14, as per FAT12 docs   
-
-
-; GET STARTING POINT OF ROOT DIRECTORY (store in AX)
-; start of root = number of fats * sectors per fat + number of reserved sectors
-; start of root = 2 * 9 + 1 = 19th sector (0x2600)
-.start_root:
-    xor     ax, ax
-    mov     al, byte [bpbNumberOfFATs]
-    mul     word[bpbSectorsPerFAT]
-    add     ax, word [bpbReservedSectors]
-
-; LOAD SECTOR OF ROOT DIRECTORY (at ES:BX=0x6000)
-; End will be at 0x7C00, which is where code starts
-.load_root:
-    mov     bx, rootDirSegmentStart
-    mov     es, bx
-    xor     bx, bx   
-.load_root_loop:
-    push    ax
-    push    bx
-    push    cx
-    call    lbatochs
-
-    mov     ah, 0x02 ; read inst
-    mov     al, 0x01 ; sectors to read
-    mov     ch, [absoluteTrack]; cylinder
-    mov     cl, [absoluteSector]; sector
-    mov     dh, [absoluteHead]; head
-    mov     dl, 0; drive
-    int     0x13
-    pop     cx
-    pop     bx
-    pop     ax
-    add     bx, WORD [bpbBytesPerSector] 
-    inc     ax
-    loop    .load_root_loop
-    ret 
-
-lbatochs:
-    xor     dx, dx                              ; prepare dx:ax for operation
-    div     WORD [bpbSectorsPerTrack]           ; calculate
-    inc     dl                                  ; adjust for sector 0
-    mov     BYTE [absoluteSector], dl
-    xor     dx, dx                              ; prepare dx:ax for operation
-    div     WORD [bpbHeadsPerCylinder]          ; calculate
-    mov     BYTE [absoluteHead], dl
-    mov     BYTE [absoluteTrack], al
-    ret
 
 ; ENTRY POINT
 loader:
 
-; SET-UP STACK
-.stack_setup:
-    cli                 ; disable interrupts
-	mov	    ax, stackSegmentStart   ; set stack segment to 0x5000 (16 * 0x500)
-	mov	    ss, ax
-	mov	    ax, stackSize  ; stack size = 0x1000
-	mov	    sp, ax
-	mov	    bp, sp      ; not sure we need to set-up bp, but do it anyway
+; Setup stack
+    cli ; disable interrupts
+	mov	ax, stackSegmentStart ; set stack segment to 0x5000 (16 * 0x500)
+	mov	ss, ax
+	mov	ax, stackSize ; stack size = 0x1000
+	mov	sp, ax
+	mov	bp, sp ; not sure we need to set-up bp, but do it anyway
 
-	xor	    ax, ax      ; zero out data and extra segments
-	mov	    ds, ax
-	mov	    es, ax
-    mov     fs, ax
-    mov     gs, ax
-    sti                 ; set interrupts
+	xor	ax, ax ; zero out data and extra segments
+	mov	ds, ax
+	mov	es, ax
+    mov fs, ax
+    mov gs, ax
+    sti ; set interrupts
 
-    ; Find second stage
-    ; Load fat root
-    call    root_loading
-    call    LOAD_FAT
+; Load root and fat tables
+    call root_loading
+    call load_fat 
 
-; ITERATE OVER FILES IN FAT12
-    mov     cx, 16      ; Assume there is up to 16 files. TODO: fix this
-.printNextFileName:
+; Check if any file in the root directory matches stage1 file name
+    mov cx, 16      ; Assume there is up to 16 files. TODO: fix this
+
+.next_filename:
     ; Copy file name
-    push    ds          ; save ds and es as we will use them to copy string
-    push    es
-    push    cx
+    ; DS:SI -> ES:DI
 
+    save_ds_es_cx ;save ds and es as we will use them to copy string
+
+    ; Set DS (source segment) 
+    mov ax, rootDirSegmentStart 
+    mov ds, ax ; set data segment to point to root entry segment - this is source segment for string copy
+
+    ; Set SI (source index)
     ; si = starting address of root directory entry
-    mov     ax, cx      ; a = counter
-    dec     ax          ; a--
-    mov     bx, 0x20    ; b = 32
-    mul     bx          ; a = a * b
-    mov     WORD[curFile], ax ; TODO: THIS HAS NO EFFECT, BUT WORKS ELSEWHERE!!!!
-    mov     si, ax      ; set start point for string copy
+    ; a = current item index
+    ; 0x20 = size of root entry
+    ; si = offset in root table = (a - 1) * 0x20
+    mov ax, cx
+    dec ax 
+    mov bx, 0x20 
+    mul bx 
+    mov si, ax 
 
-    ; copy cluster 
-    mov     bx, ax
-    add     bx, 0x1A
-    mov     WORD[curCluster], bx
+    ; Store logical cluster number of current entry
+    mov bx, ax ;bx = offest into root table
+    add bx, 0x1A ;plus 26th byte gives first logical cluster of this file
+    mov WORD[curCluster], bx ; so put this value away
 
-    xor     cx, cx
-    mov     cx, 11      ; each file name is up to 11 chars long
-    mov     ax, rootDirSegmentStart 
-    mov     ds, ax      ; set data segment to point to root entry segment - this is source segment for string copy
+    
+    ; Set loop counter - we want to copy 11 chars, 8 for filename and 3 for extension
+    xor cx, cx
+    mov cx, 11 ; each file name is up to 11 chars long
+    
+    ; Set ES:DI (destination)
+    xor ax, ax
+    mov es, ax ; es is destination segment for string copy - zero it out
+    mov di, fileName ; instead use di (destination index) alone
 
+    rep movsb ; copy string (cx characters from ds:si to es:di)  
+    restore_cx_es_ds ; most recently cx was used to count number of chars in filename - now restore cx from stack that indicates number of files left
 
-    xor     ax, ax
-    mov     es, ax      ; es is destination segment for string copy - zero it out
-    mov     di, fileName ; instead use di (destination index) alone
+    cmp byte[fileName], 0x00 ; skip file if name starts with 0x00 - from fat 12 specs
+    je .skip
+    cmp byte[fileName], 0xe5 ; skip file if name starts with 0xe5 - from fat 12 specs
+    je .skip
 
-    ;push    di          ; push & pop di so we can keep track of where current file starts
-    rep movsb           ; copy string (cx characters from ds:si to es:di)  
-    ;pop     di
-
-    pop     cx          ; most recently cx was used to count number of chars in filename - now restore cx from stack that indicates number of files left
-    pop     es          ; restore ds and es
-    pop     ds
-
-    ; Print file name, which is stored ad location of fileName
-    cmp     byte[fileName], 0x00 ; skip file if name starts with 0x00 - from fat 12 specs
-    je      .skip
-    cmp     byte[fileName], 0xe5 ; skip file if name starts with 0xe5 - from fat 12 specs
-    je      .skip
-    ;mov     si, fileName    ; use printn subroutine to print file name
-    ;push    PRINTNL         ; ...and put new line after each file name 
-    ;call    printn  
-    ;add     sp, 2 
-
-
-; CHECK IF CORRECT FILE
+    ; Check if current file name is the same as stage1 
     pusha
-    call    filename_compare
+    call filename_compare
     popa
+
     .skip:
-    loop    .printNextFileName
+    loop .next_filename
 
+    ; TODO: fix the following code and make it generic
     cmp word[stage1sector], 4321
-    jnz jump_to_loaded_code
+    jnz stop
 
-print_booting: 
-;    mov si, booting
-;    push PRINTNL
-;    call printn
-;    add sp, 2
-      
     mov ax, word[stage1sector]
     mov ax, 34
     call lbatochs 
@@ -303,40 +183,16 @@ print_booting:
     mov dl, 0
     int 0x13
     mov ax, 789
-; SET-UP BUFFER FOR FLOPPY DATA
-;.read_sector_dest_setup:
-;	mov	    ax, stage1SegmentStart  ; Floppy data will be read into  es:bx
-;	mov	    es, ax
-;	xor	    bx, bx
 
-; READ SECTOR FROM FLOPPY
-;.read_sector:
-;	mov	ah, 0x02	    ; Read sector, ah=2,al=num sectors to read,ch=cylinder,cl=sector,dh=head,dl=drive,es:bx=destination buffer
-;                        ; results: CF set on error,ah=return code,al=sector read count
-;	mov	al, 0x01
-;	mov	ch, 0
-;	mov	cl, 2
-;	mov	dh, 0
-;	mov	dl, 0
-;	int	0x13
-;    jc .reset           ; If error occurred, reset floppy and try reading again
-
-jump_to_loaded_code:    ; Jump to more code
+jump_to_stage1:    ; Jump to more code
    ; push    WORD 0x0050
    ; push    WORD 0x0000
    ; retf
    jmp 0x7e00
-; RESET FLOPPY DRIVE    
-reset_floppy:			        ; Reset floppy before reading, ag=dl=0
-	mov	    ah, 0
-    mov	    dl, 0
-	int	    0x13
-	jc	    reset_floppy        ; CF is set on error
-    ret
 
 
 ; eh, this is broken
-LOAD_FAT:
+load_fat:
     pusha
     call    reset_floppy
     popa
@@ -365,11 +221,129 @@ stop:
 	cli
 	hlt
 
-curFile        dw 0x00
+
+
+
+;===============================================================================
+;Utils
+;
+;RESET FLOPPY DRIVE    
+reset_floppy:			        ; Reset floppy before reading, ag=dl=0
+	mov	    ah, 0
+    mov	    dl, 0
+	int	    0x13
+	jc	    reset_floppy        ; CF is set on error
+    ret
+
+;LOGICAL CLUSTER TO CHS
+;AX - cluster number
+lbatochs:
+    xor     dx, dx                              ; prepare dx:ax for operation
+    div     WORD [bpbSectorsPerTrack]           ; calculate
+    inc     dl                                  ; adjust for sector 0
+    mov     BYTE [absoluteSector], dl
+    xor     dx, dx                              ; prepare dx:ax for operation
+    div     WORD [bpbHeadsPerCylinder]          ; calculate
+    mov     BYTE [absoluteHead], dl
+    mov     BYTE [absoluteTrack], al
+    ret
+
+; Compares two file names, one from root table, other one from fileName
+filename_compare:
+    push ebp
+    mov ebp, esp
+
+    ; Compare strings in DS:SI and ES:DI
+    mov cx, 11          ; Compare 11 chars - needed by repe
+    xor ax, ax          
+    mov ds, ax          ; no need for values in segments ds and es
+    mov es, ax
+    mov si, fileName    ; set source and destination for string comparison
+    mov di, stage1Name
+    repe cmpsb           ; compare strings
+
+    jnz .not_equal
+    
+    mov word[stage1sector], 4321
+    jmp .return
+
+.not_equal: ; did not find file
+
+.return:
+    pop ebp
+    ret
+
+
+;===============================================================================
+;Root table loading  
+;
+root_loading:
+; GET SIZE OF ROOT DIRECTORY (in # of sectors, store in CX)
+; size of root = (0x20 (32) bytes per root entry * number of root entries) / 512 bytes in a sector 
+; size of root = (32 * 224) / 512 = 14 sectors
+.size_root:
+    ;xor     ax, ax  
+    ;xor     cx, cx
+    ;xor     dx, dx
+    mov     ax, bytesPerRootEntry
+    mul     word [bpbRootEntries]
+    div     word [bpbBytesPerSector]
+    xchg    ax, cx  ; CX should be 14, as per FAT12 docs   
+
+
+; GET STARTING POINT OF ROOT DIRECTORY (store in AX)
+; start of root = number of fats * sectors per fat + number of reserved sectors
+; start of root = 2 * 9 + 1 = 19th sector (0x2600)
+.start_root:
+    xor     ax, ax
+    mov     al, byte [bpbNumberOfFATs]
+    mul     word[bpbSectorsPerFAT]
+    add     ax, word [bpbReservedSectors]
+
+; LOAD SECTOR OF ROOT DIRECTORY (at ES:BX=0x500)
+.load_root:
+; Set up destination buffer
+    mov     bx, rootDirSegmentStart
+    mov     es, bx
+    xor     bx, bx   
+.load_root_loop:
+; Save some registers
+    push    ax
+    push    bx
+    push    cx
+; Calculate location on the floppy to read from based on logical cluster
+; stored in ax (which points to beginning of root table).
+    call    lbatochs
+
+; Read root table from floppy
+    mov     ah, 0x02 ; read inst
+    mov     al, 0x01 ; sectors to read
+    mov     ch, [absoluteTrack]; cylinder
+    mov     cl, [absoluteSector]; sector
+    mov     dh, [absoluteHead]; head
+    mov     dl, 0; drive
+    int     0x13
+
+; Restore some registers after reading
+    pop     cx
+    pop     bx
+    pop     ax
+    add     bx, WORD [bpbBytesPerSector]
+
+; Increase counter AX that holds # of sectors read and loop until it 
+; matches CX which is how many sectors we have in root table 
+    inc     ax
+    loop    .load_root_loop
+
+; Done, root table loaded
+    ret 
+
+
 curCluster     db 0x00
 absoluteSector db 0x00
 absoluteHead   db 0x00
 absoluteTrack  db 0x00
 times	510	- ($-$$) db 0
+
 
 dw 0xAA55

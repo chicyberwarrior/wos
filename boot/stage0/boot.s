@@ -60,7 +60,7 @@ stage1SegmentStart  equ 0x210
 start:	jmp loader
 
 ; Name of the system
-bsOEM			DB "WOS1    "
+bsOEM			DB " WOS1    "
 
 ; BIOS parameter block
 bpbBytesPerSector: 	    DW 512
@@ -69,7 +69,7 @@ bpbReservedSectors: 	DW 1
 bpbNumberOfFATs: 	    DB 2
 bpbRootEntries: 	    DW 224
 bpbTotalSectors: 	    DW 2880
-bpbMedia: 	            DB 0xF0
+bpbMedia: 	            DB 0xf8
 bpbSectorsPerFAT: 	    DW 9
 bpbSectorsPerTrack: 	DW 18
 bpbHeadsPerCylinder: 	DW 2
@@ -83,7 +83,8 @@ bsVolumeLabel: 	        DB "VOSBOOTDISK"
 bsFileSystem: 	        DB "FAT12   "
 fileName		        DB "...........", 0
 stage1Name              DB "STAGE1  BIN", 0
-
+loading_msg             DB "Loading...", 0
+failed_msg              DB "Stage0 failed!", 0
 section .text
 
 ;===============================================================================
@@ -116,7 +117,6 @@ loader:
 .next_filename:
     ; Copy file name
     ; DS:SI -> ES:DI
-
     save_ds_es_cx ;save ds and es as we will use them to copy string
 
     ; Set DS (source segment) 
@@ -125,7 +125,7 @@ loader:
 
     ; Set SI (source index)
     ; si = starting address of root directory entry
-    ; a = current item index
+    ; ax = current item index
     ; 0x20 = size of root entry
     ; si = offset in root table = (a - 1) * 0x20
     mov ax, cx
@@ -135,19 +135,18 @@ loader:
     mov si, ax 
 
     ; Store logical cluster number of current entry
-    push ax
-    mov ax, rootDirSegmentStart
-    mov bx, 16
+    push ax ; save source index
+    mov ax, rootDirSegmentStart ; set up data segment for reading root table
+    mov bx, 16 
     mul bx
     mov bx, ax
     pop ax
     add bx, ax ;bx = offest into root table
     add bx, 0x1A ;plus 26th byte gives first logical cluster of this file
-    ;mov WORD[curCluster], bx
- 
-    sub bx, 0x500 
-    mov ax, [bx]
-    mov WORD[curRootByte], ax; so put this value away
+    sub bx, rootDirSegmentStart * 16 ; this is awkward, i know
+     
+    mov ax, [bx] ; load value of first logical cluster into ax
+    mov WORD[curRootByte], ax ; and save it
     
     ; Set loop counter - we want to copy 11 chars, 8 for filename and 3 for extension
     xor cx, cx
@@ -193,6 +192,7 @@ loader:
     mov es, bx
     mov bx, 0x7e00
 
+    ; Read one sector
     mov ah, 0x02
     mov al, 0x1
     mov ch, [absoluteTrack]
@@ -200,16 +200,29 @@ loader:
     mov dh, [absoluteHead]
     mov dl, 0
     int 0x13
-    mov ax, 789
 
 jump_to_stage1:    ; Jump to more code
-   ; push    WORD 0x0050
-   ; push    WORD 0x0000
-   ; retf
-   jmp 0x7e00
+   mov si, loading_msg
+   push 0x07
+   
+   ; print progress messae
+   .printbegin:
+   lodsb ; next char
+   or al, al
+   jz .printdone
+   mov ah, 0x0e ; int10h print function
+   int 0x10
+   jmp .printbegin
+   .printdone:
+   mov ah, 0x0e
+   mov al, 0x0a ; line feed
+   int 0x10
+   mov al, 0x0d ; carriage return
+   int 0x10
+    
+   jmp 0x7e00 ; jump to stage1 now
 
 
-; eh, this is broken
 load_fat:
     pusha
     call reset_floppy
@@ -227,7 +240,7 @@ load_fat:
     mov ah, 0x02 ; read inst
     mov al, 0x09 ; sectors to read
     mov ch, [absoluteTrack]; cylinder
-    mov cl, 2; [absoluteSector]; sector
+    mov cl, [absoluteSector]; sector
     mov dh, [absoluteHead]; head
     mov dl, 0; drive
     int 0x13
@@ -238,9 +251,6 @@ load_fat:
 stop:
 	cli
 	hlt
-
-
-
 
 ;===============================================================================
 ;Utils

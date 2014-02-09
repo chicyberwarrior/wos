@@ -201,6 +201,8 @@ loader:
     mov dl, 0
     int 0x13
 
+    ; calculate next sector
+
 jump_to_stage1:    ; Jump to more code
    mov si, loading_msg
    push 0x07
@@ -231,12 +233,14 @@ load_fat:
     pusha
 
     xor ax, ax
-    mov ax, 2
+    mov ax, 1
     call lbatochs
 
-    xor bx, bx
+    mov bx, 0x210
     mov es, bx
-    mov bx, 0x2100
+    xor bx, bx
+    mov ds, bx
+
     mov ah, 0x02 ; read inst
     mov al, 0x09 ; sectors to read
     mov ch, [absoluteTrack]; cylinder

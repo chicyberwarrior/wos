@@ -83,8 +83,6 @@ bsVolumeLabel: 	        DB "VOSBOOTDISK"
 bsFileSystem: 	        DB "FAT12   "
 fileName		        DB "...........", 0
 stage1Name              DB "STAGE1  BIN", 0
-loading_msg             DB "Loading...", 0
-failed_msg              DB "Stage0 failed!", 0
 section .text
 
 ;===============================================================================
@@ -99,11 +97,11 @@ loader:
     mov	sp, ax
     mov	bp, sp ; not sure we need to set-up bp, but do it anyway
 
-    xor	ax, ax ; zero out data and extra segments
-    mov	ds, ax
-    mov	es, ax
-    mov fs, ax
-    mov gs, ax
+    ;xor	ax, ax ; zero out data and extra segments
+    ;mov	ds, ax
+    ;mov	es, ax
+    ;mov fs, ax
+    ;mov gs, ax
 
 ; Load root and fat tables
     call load_root ; no need for fat table if stage1 is smallter than a sector and is located in root dir, but load anyway
@@ -176,21 +174,33 @@ loader:
     inc cx
     cmp cx, [bpbRootEntries]
     jnz .next_filename
-
     jmp stop
-    ; TODO: fix the following code and make it generic
+
 .found_stage1:
     popa
-    mov ax, rootDirSegmentStart ; Set the data segment to start of root dir so we can get the sector number...
-    mov ds, ax
-    mov ax, WORD[curRootByte]
-    xor bx, bx ; ...and then restore it to zero so we can carry on...
+    xor cx, cx ; save index into file buffer
+    push cx
+
+; This is really uhly, needs refactoring.
+.read_stage1_chunk:
+    mov ax, WORD[curRootByte+0x500] ; get value from FAT index
+
+    xor bx, bx ; Get address of next chunk
     mov ds, bx
     add ax, 31
     call lbatochs 
     xor bx, bx
     mov es, bx
-    mov bx, 0x7e00
+
+    pop ax ; Increment index into FAT index, save it, and calculate file buffer start position
+    mov dx, ax
+    inc dx
+    push dx
+    mov cx, 0x200
+    mul cx
+    mov cx, 0x7e00
+    add ax, cx
+    mov bx, ax
 
     ; Read one sector
     mov ah, 0x02
@@ -202,26 +212,30 @@ loader:
     int 0x13
 
     ; calculate next sector
+    ; see http://www.brokenthorn.com/Resources/ for more details on how this works
+    xor ax, ax
+    mov ds, ax
+    mov bx, WORD[curRootByte+0x500]
+    mov cx, bx
+    shr cx, 1
+    add bx, cx
+    mov cx, 0x2100
+    add bx, cx
+    mov cx, WORD[bx]
+    mov ax, WORD[curRootByte+0x500]
+    test ax, 0x0001
+    jnz .odd
+.even:
+    and cx, 0000111111111111b
+    jmp .done
+.odd:
+    shr cx, 0x4
+.done:
+    cmp cx, 0xff0
+    mov WORD[curRootByte+0x500], cx
+    jb .read_stage1_chunk
 
 jump_to_stage1:    ; Jump to more code
-   mov si, loading_msg
-   push 0x07
-   
-   ; print progress messae
-   .printbegin:
-   lodsb ; next char
-   or al, al
-   jz .printdone
-   mov ah, 0x0e ; int10h print function
-   int 0x10
-   jmp .printbegin
-   .printdone:
-   mov ah, 0x0e
-   mov al, 0x0a ; line feed
-   int 0x10
-   mov al, 0x0d ; carriage return
-   int 0x10
-    
    jmp 0x7e00 ; jump to stage1 now
 
 
@@ -248,7 +262,10 @@ load_fat:
     mov dh, [absoluteHead]; head
     mov dl, 0; drive
     int 0x13
- 
+
+
+    
+.end_fat_read:
     popa
     ret    
 
@@ -370,7 +387,6 @@ load_root:
     ret 
 
 
-curCluster     db 0x00
 curRootByte    dw 0x00
 absoluteSector db 0x00
 absoluteHead   db 0x00

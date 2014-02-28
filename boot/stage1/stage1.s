@@ -1,10 +1,12 @@
-org 0x0
+org 0x7e00
 bits 16
 
 jmp stage1
 
 %include 'stage0/util.s'
+%include 'stage1/vga.s'
 
+bits 16
 
 ; GDT stuff goes here.
 ; First is null descriptor, 8 bytes of 0's
@@ -49,20 +51,11 @@ msg_criticalerror db "Critical error. Halting!", 0
 
 stage1:
     ; Stage 1 located at 0x7e00
-    mov ax, 0x7e0
+    mov ax, 0x0 ; 0x7e0
     mov ds, ax
     mov es, ax
     mov fs, ax
     mov gs, ax
-
-    ; Enable gate A20
-    push PRINTNL
-    mov si, msg_enablinga20
-    call printn
-    add sp, 2
-    mov ax, 0x2401
-    int 0x15    
-    jc critical_error
 
     ; Install GDT
     push PRINTNL
@@ -79,6 +72,15 @@ stage1:
     call printn
     add sp, 2
      
+    ; Enable gate A20
+    push PRINTNL
+    mov si, msg_enablinga20
+    call printn
+    add sp, 2
+    mov ax, 0x2401
+    int 0x15    
+    jc critical_error
+
     ; Set protected mode
     push PRINTNL
     mov si, msg_enteringpmode
@@ -90,12 +92,7 @@ stage1:
     or eax, 1
     mov cr0, eax
 
-    ;push PRINTNL
-    ;mov si, msg_enteredpmode
-    ;call printn
-    ;add sp, 2
-
-    jmp pmode_start
+    jmp 0x8:pmode_start
     
 ; Inform of unrecoverable error
 critical_error:
@@ -110,8 +107,22 @@ halt:
     jmp halt
 
 bits 32
+msg_starting db "32-bit bootloader running...",0xA,0 
 
 pmode_start:
+
+    mov ax, 0x10
+    mov ds, eax
+    mov ss, eax
+    mov es, eax
+    mov esp, 0x90000
+
+    call clear_screen
+    
+    mov ebx, msg_starting
+    call print_string
+    call update_cursor
+
 .halt:
     hlt
     jmp .halt    

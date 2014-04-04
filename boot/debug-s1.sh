@@ -1,7 +1,7 @@
 #!/bin/sh
 
 echo "Building...."
-./scripts/build-stage01.sh
+./scripts/build-stage1.sh
 
 if [ $? -eq 0 ]
 then

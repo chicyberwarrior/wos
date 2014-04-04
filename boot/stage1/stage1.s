@@ -3,6 +3,7 @@ bits 16
 
 jmp stage1
 
+%include 'stage1/fat12.s'
 %include 'stage0/util.s'
 %include 'stage1/vga.s'
 
@@ -57,6 +58,7 @@ stage1:
     mov fs, ax
     mov gs, ax
 
+
     ; Install GDT
     push PRINTNL
     mov si, msg_installingGDT
@@ -80,6 +82,9 @@ stage1:
     mov ax, 0x2401
     int 0x15    
     jc critical_error
+
+
+    call find_kernel
 
     ; Set protected mode
     push PRINTNL

@@ -16,8 +16,8 @@ KERNEL_IMAGE = kernel.bin
 
 all: clean kernel 
 
-kernel: kernel.o loader.o 
-	$(LD_CMD) -T  $(LINKER_DIR)/$(LINKER_SCRIPT) -o $(BUILD_DIR)/$(KERNEL_IMAGE) $(SRC_DIR)/loader.o $(SRC_DIR)/kernel.o
+kernel: kernel.o loader.o console.o
+	$(LD_CMD) -T  $(LINKER_DIR)/$(LINKER_SCRIPT) -o $(BUILD_DIR)/$(KERNEL_IMAGE) $(SRC_DIR)/loader.o $(SRC_DIR)/kernel.o $(SRC_DIR)/console.o
 
 kernel.o:
 	$(GCC_CMD) -o $(SRC_DIR)/kernel.o -c $(SRC_DIR)/kernel.c $(CC_CUST_FLAGS) $(CC_FLAGS) 
@@ -25,7 +25,8 @@ kernel.o:
 loader.o:
 	$(ASM_CMD) $(ASM_FLAGS)  -o $(SRC_DIR)/loader.o $(SRC_DIR)/loader.s
 
-
+console.o:
+	$(GCC_CMD) -o $(SRC_DIR)/console.o -c $(SRC_DIR)/console.c $(CC_CUST_FLAGS) $(CC_FLAGS) 
 
 clean: 
 	@echo "Removing kernel..."

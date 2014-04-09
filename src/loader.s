@@ -18,11 +18,6 @@ dd mboot_checksum
 ;----------------------------------------------------------------------
 ; Stack
 section .earlystack
-;align 4
-;stack_bottom:
-;times 16384 db 0
-;stack_top:
- 
 
 ;----------------------------------------------------------------------
 ; This is entry point
@@ -30,12 +25,9 @@ section .text
 global _start
 _start:
 
-    ;mov esp, stack_top
-    
     ; Call kernel and see what's up
     extern kmain
     call kmain 
-    ;cli
 
 ; Once kernel is done executing, just hang.
 .hang:

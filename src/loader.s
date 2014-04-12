@@ -1,4 +1,6 @@
 ; Entry point for multiboot kernel
+global _stack_bottom
+global _stack_top
 
 mboot_align equ  1<<0
 mboot_meminfo equ  1<<1
@@ -18,6 +20,10 @@ dd mboot_checksum
 ;----------------------------------------------------------------------
 ; Stack
 section .earlystack
+align 4
+_stack_bottom:
+times 1048576 dd 0
+_stack_top:
 
 ;----------------------------------------------------------------------
 ; This is entry point
@@ -25,6 +31,7 @@ section .text
 global _start
 _start:
 
+    push ebx
     ; Call kernel and see what's up
     extern kmain
     call kmain 

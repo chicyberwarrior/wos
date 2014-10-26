@@ -34,7 +34,7 @@ _start:
     push ebx
     ; Call kernel and see what's up
     extern kmain
-    call kmain 
+    call kmain
 
 ; Once kernel is done executing, just hang.
 .hang:

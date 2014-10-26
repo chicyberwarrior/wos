@@ -33,5 +33,6 @@ void console_cls();
 void console_printchr(char c);
 void console_print(char * str);
 void console_printnum(int i);
+void console_printhex(int i);
 
 #endif

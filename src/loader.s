@@ -1,3 +1,11 @@
+; Dada Kernel
+; October 2014
+;
+; Entry point. Called by multiboot loader.
+; Sets up early stack and calls kernel.
+;
+; Wiktor Lukasik (wiktor@lukasik.org)
+
 ; Entry point for multiboot kernel
 global _stack_bottom
 global _stack_top
@@ -37,6 +45,8 @@ _start:
     call kmain
 
 ; Once kernel is done executing, just hang.
+global _hang
+_hang:
 .hang:
     hlt
     jmp .hang

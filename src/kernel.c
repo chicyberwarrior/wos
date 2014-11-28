@@ -1,78 +1,87 @@
+/**
+ * Dada Kernel
+ * October 2014
+ *
+ * This file is the entry point for the kernel. Called from loader.s.
+ * Responsible for initialization of stuff, like interrupt handling, memory and such.
+ *
+ * Wiktor Lukasik (wiktor@lukasik.org)
+ */
+
 /* This is kernel. */
 #include "console.h"
 #include "types.h"
 #include "string.h"
 #include "idt.h"
 #include "gdt.h"
+#include "irq.h"
+#include "sys.h"
+#include "physmem.h"
+
+extern unsigned int * kernel_begin;
+extern unsigned int * kernel_end;
 
 extern int * _stack_bottom;
 extern int * _stack_top;
+extern char cpu_name[15];
 
-char cpu_name[15];
+void show_memory_map(struct mbootinfo * bootInfo)
+{
+    int i,parts;
+    printk("Memory map: \n");
+    parts=((int)bootInfo->mmap_length)/sizeof(memoryMap);
+    unsigned int total_size = 0;
 
-/* Flags and memory range passed in by multiboot compatibile bootloader */
-struct mbootinfo {
-    int flags;
-    int memlow;
-    int memhigh;
-}; 
+    for (i=0;i<parts;i++) {
+        unsigned long size = bootInfo->mmap_addr[i].LengthLow;
+        total_size += size;
+    }
 
-/* Get CPU id and store in cpu_name */
-void cpuid() {
-        register int b asm("ebx");
-        register int c asm("ecx");
-        register int d asm("edx");
+    pmm_initialize((unsigned int) &kernel_end, total_size);
 
-        __asm__("movl $0, %eax");	
-        __asm__("cpuid");
+    for (i=0;i<parts;i++) {
+        unsigned long start = bootInfo->mmap_addr[i].BaseAddrLow;
+        unsigned long size = bootInfo->mmap_addr[i].LengthLow;
+        unsigned long end = start + size;
 
-        cpu_name[0] = (char) b;
-        cpu_name[1] = (char) (b >> 8);
-        cpu_name[2] = (char) (b >> 16);
-        cpu_name[3] = (char) (b >> 24);
-        cpu_name[4] = (char) (d);
-        cpu_name[5] = (char) (d >> 8);
-        cpu_name[6] = (char) (d >> 16);
-        cpu_name[7] = (char) (d >> 24);
-        cpu_name[8] = (char) (c);
-        cpu_name[9] = (char) (c >> 8);
-        cpu_name[10] = (char) (c >> 16);
-        cpu_name[11] = (char) (c >> 24);
-        cpu_name[12] = '\0';
-}
+        printk("  0x%x - 0x%x (%d bytes) ", start, end, size);
+/*
+        console_print("  ");
+        console_printhex(bootInfo->mmap_addr[i].BaseAddrHigh);
+        console_printhex(bootInfo->mmap_addr[i].BaseAddrLow);
+        console_print(" len:");
+        console_printhex(bootInfo->mmap_addr[i].LengthHigh);
+        console_printhex(bootInfo->mmap_addr[i].LengthLow);
+*/  
+        if(1==bootInfo->mmap_addr[i].Type) {
+            console_print(" [usable]");
+            pmm_add_memory_region(start, end);
+        } else {
+            console_print(" [reserved]");
+        }
+        console_print("\n");
+    }
 
-/* This obviously does not work. */
-void dump_registers() {
-    register int a asm("eax");
-    register int b asm("ebx");
-    register int c asm("ecx");
-    register int d asm("edx");
-    register int sp asm("esp");
-    console_print("EAX: ");
-    console_printhex(a);
-    console_print("    ");
-    console_print("EBX: ");
-    console_printhex(b);
-    console_print("    ");
-    console_print("ECX: ");
-    console_printhex(c);
-    console_print("    ");
-    console_print("EDX: ");
-    console_printhex(d);
-    console_print("    ");
-    console_print("ESP: ");
-    console_printhex(sp);
-    console_print("\n");
+    printk("Total found usable memory: %d bytes\n", pmm_get_memory_size());
 }
 
 void kmain(int * s)
 {   
+    unsigned int kernel_size = &kernel_end - &kernel_begin;
+
     /* Point multi boot info structure to whatever is at EBX (set up by loader) */
     struct mbootinfo * bi = (struct mbootinfo *) s;
-    cpuid();
-    
-    /* Print some system info */
     console_cls();
+    
+    cpuid();
+    printk("Dada v0.0.1\n");
+    printk("Running on %s\n", cpu_name);
+    printk("Kernel size: %u\n", kernel_size);
+    printk("Kernel range: 0x%x - 0x%x\n\n", &kernel_begin, &kernel_end);
+
+    show_memory_map(bi);
+
+    /* Print some system info */
 
     /* Dump contents of registers */
     console_print("Stack: "); 
@@ -83,25 +92,40 @@ void kmain(int * s)
     console_printnum(&_stack_top - &_stack_bottom); 
     console_print(" bytes)");
     console_printchr('\n');
-    console_print("Memory range: ");
-    console_printhex((bi->memlow) * 1000);
-    console_printchr('-');
-    console_printhex((bi->memhigh) * 1000);
-    console_print(" (");
-    console_printnum(((bi->memhigh) * 1000 - (bi->memlow) * 1000));
-    console_print(" bytes)\n");
-    console_print("CPU type: ");
-    console_print(cpu_name);
-    console_printchr('\n');
-    console_printchr('\n');
 
-    //clear_idt();
-    //setup_idt();
-    //flash_idt(0);
-    
+    printk("BIOS reported lower memory: %u KB\n", bi->memlow );
+    printk("BIOS reported higher memory: %u KB\n", bi->memhigh );
+     
     setup_gdt();
+    printk("GDT installed.\n");
+    setup_idt();
+    printk("IDT installed.\n");
+    remap_pic();
+    printk("PIC remapped.\n");
+    setup_irq_gates();
+    flash_idt();
+    printk("IRQ handlers installed.\n");
+    asm volatile("sti");
+    printk("Interrupts enabled!\n");
 
-    //console_print("IDT installed\n");
-    //asm volatile("int $0xcd");
+    pmm_print_summary();
+    //unmaskIRQ(0x08);
+    //asm volatile("sti");  
+
+    /*asm volatile("int $0x4");
+    asm volatile("int $0x6");
+    asm volatile("int $0x5");
+    asm volatile("int $0x7");
+    asm volatile("int $0x3");
+    asm volatile("int $0xD");
+    asm volatile("int $0xD");
+    asm volatile("int $0xD");
+    asm volatile("int $0xD");
+    asm volatile("int $0xD");
+    asm volatile("int $0x3");
+    asm volatile("int $0x2");
+    asm volatile("int $0x1");*/
+    //asm volatile("int $0xbd");
+    //asm volatile("int $0xaf");
     //int x = 2/0;
 }

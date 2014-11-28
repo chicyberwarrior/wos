@@ -45,6 +45,11 @@ void console_print(char * str) {
     }
 }
 
+void console_printnl(char * str) {
+    console_print(str);
+    console_print("\n");
+}
+
 /* Print character. 
    '\n' char is interpreted as new line.
    Screen is scrolled up once buffer is filled. */
@@ -148,4 +153,169 @@ void console_printhex(int i) {
     while(c--) {
         console_printchr(buf[c]);
     }
+}
+
+/* Source: http://www.julienlecomte.net/simplix/ */
+int vsnprintf(char *str, size_t size, const char *format, va_list ap)
+{
+    char c;
+    int i = 0, count = 0, minwidth = -1, zeropad = FALSE;
+
+    #define OUTPUTCHAR(c)       \
+    do {                        \
+        *str++ = (c);           \
+        count++;                \
+        if ((size_t)count >= size-1)    \
+            goto end;           \
+    } while (0)
+
+    while ((c = format[i++]) != '\0') {
+
+        if (minwidth == -1) {
+            if (c != '%') {
+                OUTPUTCHAR(c);
+                continue;
+            }
+            c = format[i++];
+        }
+
+        switch (c) {
+
+            case '%':
+                /* Escaped '%' */
+                OUTPUTCHAR('%');
+                OUTPUTCHAR('%');
+                break;
+
+            case 'c':
+                /* Single character. */
+                c = (char) va_arg(ap, int);
+                OUTPUTCHAR(c);
+                break;
+
+            case 's': {
+                /* String. */
+                char *s = va_arg(ap, char *);
+                while (*s != '\0')
+                    OUTPUTCHAR(*s++);
+                break;
+            }
+
+            case '.': {
+                /* minwidth maybe? */
+                int j = i;
+                minwidth = 0;
+                zeropad = FALSE;
+                while ((c = format[j++]) != '\0') {
+                    if (c >= '0' && c <= '9') {
+                        minwidth = 10 * minwidth + c - '0';
+                        if (c == '0' && j == i+1)
+                            zeropad = TRUE;
+                    } else if (c == 'u' || c == 'd' || c == 'x' || c == 'X') {
+                        i = j-1;
+                        break;
+                    } else {
+                        break;
+                    }
+                }
+                if (minwidth == -1) {
+                    /* Invalid minwidth. Output original string. */
+                    OUTPUTCHAR('%');
+                    OUTPUTCHAR('.');
+                }
+                break;
+            }
+
+            case 'u': {
+                /* Unsigned decimal. */
+                int i = 0;
+                int digits[10];
+                unsigned int n = va_arg(ap, int);
+                do {
+                    digits[i++] = n % 10;
+                    n /= 10;
+                } while (n > 0);
+                while (--minwidth >= i)
+                    OUTPUTCHAR(zeropad ? '0' : ' ');
+                while (--i >= 0)
+                    OUTPUTCHAR('0' + digits[i]);
+                minwidth = -1;
+                break;
+            }
+
+            case 'd': {
+                /* Signed decimal. */
+                int i = 0;
+                int digits[10];
+                int n = va_arg(ap, int);
+                if (n < 0) {
+                    OUTPUTCHAR('-');
+                    n = -n;
+                }
+                do {
+                    digits[i++] = n % 10;
+                    n /= 10;
+                } while (n > 0);
+                while (--minwidth >= i)
+                    OUTPUTCHAR(zeropad ? '0' : ' ');
+                while (--i >= 0)
+                    OUTPUTCHAR('0' + digits[i]);
+                minwidth = -1;
+                break;
+            }
+
+            case 'x':
+            case 'X': {
+                /* Unsigned hexadecimal. */
+                int i = 0;
+                int digits[8];
+                unsigned int n = va_arg(ap, int);
+                do {
+                    digits[i++] = n % 16;
+                    n /= 16;
+                } while (n > 0);
+                while (--minwidth >= i)
+                    OUTPUTCHAR(zeropad ? '0' : ' ');
+                while (--i >= 0) {
+                    if (digits[i] < 10) {
+                        OUTPUTCHAR('0' + digits[i]);
+                    } else if (c == 'x') {
+                        OUTPUTCHAR('a' + digits[i] - 10);
+                    } else {
+                        OUTPUTCHAR('A' + digits[i] - 10);
+                    }
+                }
+                minwidth = -1;
+                break;
+            }
+
+            default:
+                /* We don't support this type of conversion. */
+                OUTPUTCHAR('%');
+                OUTPUTCHAR(c);
+                break;
+        }
+    }
+
+end:
+
+    *str = '\0';
+    count++;
+
+    return count;
+}
+
+int printk(const char *format, ...)
+{
+    int len;
+    va_list ap;
+    char buf[256];
+    //char *s = buf;
+
+    va_start(ap, format);
+    len = vsnprintf(buf, sizeof(buf), format, ap);
+
+    console_print(buf);
+
+    return len;
 }

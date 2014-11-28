@@ -1,3 +1,10 @@
+; Dada Kernel
+; October 2014
+;
+; Assembler helpers for GDT initialization.
+;
+; Wiktor Lukasik (wiktor@lukasik.org)
+ 
 global _flush_gdt_and_refresh
 
 [extern gdt_ptr]

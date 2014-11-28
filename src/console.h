@@ -1,3 +1,5 @@
+#include "types.h"
+
 #ifndef console_h
 #define console_h
 
@@ -32,7 +34,17 @@ void console_update_cursor();
 void console_cls();
 void console_printchr(char c);
 void console_print(char * str);
+void console_printnl(char * str);
 void console_printnum(int i);
 void console_printhex(int i);
 
+/* Source: https://github.com/klange/toaruos/blob/master/kernel/include/va_list.h */
+typedef __builtin_va_list va_list;
+#define va_start(ap,last) __builtin_va_start(ap, last)
+#define va_end(ap) __builtin_va_end(ap)
+#define va_arg(ap,type) __builtin_va_arg(ap,type)
+#define va_copy(dest, src) __builtin_va_copy(dest,src)
+
+int vsnprintf(char *str, size_t size, const char *format, va_list ap);
+int printk(const char *format, ...);
 #endif

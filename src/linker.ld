@@ -2,8 +2,10 @@ ENTRY(_start)
 
 SECTIONS
 {
-    . = 1M;
 
+    . = 1M;
+    kernel_begin = .;
+    
     .text BLOCK(4K) : ALIGN(4K)
     {
         *(.multiboot)
@@ -27,4 +29,5 @@ SECTIONS
         *(.earlystack)
     }
 
+    kernel_end = .;
 }

@@ -1,3 +1,4 @@
+
 ASM_CMD = nasm
 ASM_FLAGS = -felf
 LD_CMD = ld
@@ -25,14 +26,20 @@ strip:
 symbols:
 	$(OBJCOPY) $(OBJCOPY_FLAGS) $(BUILD_DIR)/$(KERNEL_IMAGE) $(BUILD_DIR)/$(KERNEL_SYMBOLS)
 
-kernel: kernel.o loader.o console.o string.o idt.o gdt.o
-	$(LD_CMD) -T  $(LINKER_DIR)/$(LINKER_SCRIPT) -o $(BUILD_DIR)/$(KERNEL_IMAGE) $(SRC_DIR)/gdt.o $(SRC_DIR)/string.o $(SRC_DIR)/idt.o $(SRC_DIR)/loader.o $(SRC_DIR)/kernel.o $(SRC_DIR)/console.o $(SRC_DIR)/gdtasm.o
+kernel: kernel.o loader.o sys.o console.o string.o idt.o gdt.o idtasm.o irq.o physmem.o
+	$(LD_CMD) -T  $(LINKER_DIR)/$(LINKER_SCRIPT) -o $(BUILD_DIR)/$(KERNEL_IMAGE) $(SRC_DIR)/sys.o $(SRC_DIR)/gdt.o $(SRC_DIR)/string.o $(SRC_DIR)/idt.o $(SRC_DIR)/loader.o $(SRC_DIR)/kernel.o $(SRC_DIR)/console.o $(SRC_DIR)/gdtasm.o $(SRC_DIR)/idtasm.o $(SRC_DIR)/irq.o $(SRC_DIR)/physmem.o
+
+sys.o:
+	$(GCC_CMD) -o $(SRC_DIR)/sys.o -c $(SRC_DIR)/sys.c $(CC_CUST_FLAGS) $(CC_FLAGS) 
 
 idtasm.o:
 	$(ASM_CMD) $(ASM_FLAGS)  -o $(SRC_DIR)/idtasm.o $(SRC_DIR)/idtasm.s
 
 idt.o:
 	$(GCC_CMD) -o $(SRC_DIR)/idt.o -c $(SRC_DIR)/idt.c $(CC_CUST_FLAGS) $(CC_FLAGS) 
+
+irq.o:
+	$(GCC_CMD) -o $(SRC_DIR)/irq.o -c $(SRC_DIR)/irq.c $(CC_CUST_FLAGS) $(CC_FLAGS) 
 
 string.o:
 	$(GCC_CMD) -o $(SRC_DIR)/string.o -c $(SRC_DIR)/string.c $(CC_CUST_FLAGS) $(CC_FLAGS) 
@@ -49,6 +56,9 @@ console.o:
 gdt.o:
 	$(GCC_CMD) -o $(SRC_DIR)/gdt.o -c $(SRC_DIR)/gdt.c $(CC_CUST_FLAGS) $(CC_FLAGS) 
 	$(ASM_CMD) $(ASM_FLAGS) -o $(SRC_DIR)/gdtasm.o $(SRC_DIR)/gdt.s
+
+physmem.o:
+	$(GCC_CMD) -o $(SRC_DIR)/physmem.o -c $(SRC_DIR)/physmem.c $(CC_CUST_FLAGS) $(CC_FLAGS) 
 
 clean: 
 	@echo "Removing kernel..."

@@ -29,7 +29,8 @@ struct idt_desc {
 } __attribute__((__packed__));
 
 void clear_idt();
-void flash_idt(void * idt_ptr);
+void flash_idt();
 void setup_idt();
+void setup_idt_gate(int gate, void (*func_base)());
 
 #endif

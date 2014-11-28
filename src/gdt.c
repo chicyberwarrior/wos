@@ -18,34 +18,21 @@ void setup_gdt_segment_descriptor_bits(int i, unsigned int base_addr, unsigned i
 }
 
 void setup_gdt_segment_descriptor(int entryn, unsigned int base, unsigned char sec, unsigned char gran) {
-    console_print("Setting up GDT entry #"); 
-    console_printnum(entryn); 
-    console_print("\n");
-
     setup_gdt_segment_descriptor_bits(entryn, 0, base, sec, gran); 
 }
 
 void flush_gdt() {
-    console_print("Flushing GDT...");
     _flush_gdt_and_refresh();
-    console_print(" done!\n");
 }
 
 void setup_gdt() {
-    console_print("Setting up GDT...\n");
-    
     unsigned int gdt_base = (unsigned int) &gdt_entries;
     unsigned short gdt_size = (unsigned short) sizeof(struct gdt_segment_descriptor) * NUM_GDT_ENTRIES;
     
     gdt_ptr.size = gdt_size;
     gdt_ptr.base = gdt_base;
 
-    console_print("GDT base address: ");
-    console_printhex(gdt_ptr.base);
-    console_print("\n");
-    console_print("GDT size: ");
-    console_printnum(gdt_ptr.size);
-    console_print("\n");
+    printk("GDT base address: 0x%x, size: %d\n", gdt_ptr.base, gdt_ptr.size);
 
     // This is messy. See on-line resources for more explanation:
     //  http://www.jamesmolloy.co.uk/tutorial_html/4.-The%20GDT%20and%20IDT.html

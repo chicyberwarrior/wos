@@ -45,6 +45,15 @@ void console_print(char * str) {
     }
 }
 
+void serial_print(char * str) {
+    char * ptr = str;
+    while( *ptr != 0 ) {
+        char c = *ptr;
+        write_serial(c);
+        ptr++;
+    }
+}
+
 void console_printnl(char * str) {
     console_print(str);
     console_print("\n");
@@ -81,6 +90,10 @@ void console_printchr(char c) {
         long row = console_position / CONSOLE_COLS;
         row++;
         console_position = row * CONSOLE_COLS;
+    } else if( c == '\t' ) {
+        for(int i = 0; i < 4; i++) {
+            console_printchr(' ');
+        }
     } else {
         videoram[GET_CONSOLE_CHAR_POS] = c;
         videoram[GET_CONSOLE_MODE_POS] = CONSOLE_COLOR;
@@ -305,17 +318,50 @@ end:
     return count;
 }
 
-int printk(const char *format, ...)
-{
+int printk(const char *format, ...) {
     int len;
     va_list ap;
     char buf[256];
-    //char *s = buf;
 
     va_start(ap, format);
     len = vsnprintf(buf, sizeof(buf), format, ap);
 
     console_print(buf);
 
+#ifdef CONSOLE_TO_LOG
+#ifdef LOG_LINE_DECORATORS
+    serial_print("CONS> ");
+#endif
+    serial_print(buf);
+#endif
+
     return len;
 }
+
+int log(const char *format, ...) {
+    int len;
+    va_list ap;
+    char buf[256];
+
+    va_start(ap, format);
+    len = vsnprintf(buf, sizeof(buf), format, ap);
+
+#ifdef LOG_LINE_DECORATORS
+    serial_print("LOG > ");
+#endif
+    serial_print(buf);
+
+#ifdef LOG_TO_CONSOLE
+    console_print(buf);
+#endif
+    
+    return len;
+}
+
+void write_serial(char a) {
+   while (is_transmit_empty() == 0);
+ 
+   outb(PORT,a);
+}
+
+

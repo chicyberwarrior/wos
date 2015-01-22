@@ -30,6 +30,7 @@
 #define GET_CONSOLE_CUR_ROW console_position / CONSOLE_COLUMNS                                                                                                
 #define GET_CONSOLE_CUR_COL console_position % CONSOLE_COLUMNS
 #define RESET_CONSOLE_POSITION console_position = 0
+
 void console_update_cursor();
 void console_cls();
 void console_printchr(char c);
@@ -47,4 +48,12 @@ typedef __builtin_va_list va_list;
 
 int vsnprintf(char *str, size_t size, const char *format, va_list ap);
 int printk(const char *format, ...);
+
+/* Serial port output */
+void write_serial(char a);
+
+/* Logging */
+#define LOG_TO_CONSOLE 
+#define CONSOLE_TO_LOG
+
 #endif

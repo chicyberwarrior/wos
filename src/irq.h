@@ -19,6 +19,7 @@ struct irq_registers {
 };
 
 void remap_pic();
+void irq_ack(unsigned int irq_no);
 void setup_irq_gates();
 void default_irq_handler(struct irq_registers regs);
 void maskIRQ(unsigned char irq);

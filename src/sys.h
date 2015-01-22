@@ -53,5 +53,11 @@ void outportb(unsigned short _port, unsigned char _data);
 /* Reads data from a port */
 unsigned char inportb(unsigned short _port);
 
+/* Keep calm and panic. */
+void panic(char * msg);
+
+/* Do nothing forever. */
+void halt_and_catch_fire();
 
 #endif
+

@@ -34,11 +34,11 @@ void remap_pic() {
     outportb(0xA1, 0x01);
     
     // kbd only
-    outportb(0x21,0xfd);
+    outportb(0x21,0xfc);
     outportb(0xa1,0xff);
 
-    outportb(0x21, 0x0);
-    outportb(0xA1, 0x0);
+    //outportb(0x21, 0x0);
+    //outportb(0xA1, 0x0);
 
 }
 
@@ -69,17 +69,23 @@ void irq_ack(unsigned int irq_no) {
 }
 
 void default_irq_handler(struct irq_registers regs) {
+    
+    // Timer
     if(regs.irq == 0x20) {
         outportb(0x20, 0x20);
         outportb(0xa0,0x20);
         return;
     }
+
+    // Keyboard
     if(regs.irq == 0x21) {
+        printk("KEY\n");
         inportb(0x60);
     }
-    
-    outportb(0x20, 0x20);
-    outportb(0xa0,0x20);
+   
+    irq_ack(regs.irq); 
+    //outportb(0x20, 0x20);
+    //outportb(0xa0,0x20);
     //maskIRQ(0x0);
     return;
 

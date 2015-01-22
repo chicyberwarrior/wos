@@ -1,5 +1,6 @@
 extern default_handler
 extern default_irq_handler
+extern kbd_handler
 
 %macro ISR_DEFAULT 1
 global isr%1
@@ -20,6 +21,24 @@ isr%1:
     add esp, 8
     iret
 %endmacro
+
+global isrkbd
+isrkbd:
+    push 0
+    push 33
+    pushad
+    push ds
+    push es
+    push fs
+    push gs
+    call kbd_handler
+    pop gs
+    pop fs
+    pop es
+    pop ds
+    popad
+    add esp, 8
+    iret
 
 %macro ISR_ERR 1
 global isr%1

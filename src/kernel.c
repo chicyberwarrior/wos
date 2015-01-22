@@ -17,6 +17,7 @@
 #include "irq.h"
 #include "sys.h"
 #include "physmem.h"
+#include "experiment/current/experiment.h"
 
 extern unsigned int * kernel_begin;
 extern unsigned int * kernel_end;
@@ -44,24 +45,19 @@ void show_memory_map(struct mbootinfo * bootInfo)
         unsigned long size = bootInfo->mmap_addr[i].LengthLow;
         unsigned long end = start + size;
 
-        printk("  0x%x - 0x%x (%d bytes) ", start, end, size);
-/*
-        console_print("  ");
-        console_printhex(bootInfo->mmap_addr[i].BaseAddrHigh);
-        console_printhex(bootInfo->mmap_addr[i].BaseAddrLow);
-        console_print(" len:");
-        console_printhex(bootInfo->mmap_addr[i].LengthHigh);
-        console_printhex(bootInfo->mmap_addr[i].LengthLow);
-*/  
-        if(1==bootInfo->mmap_addr[i].Type) {
-            console_print(" [usable]");
+        printk("  0x%x - 0x%x (%d bytes)", start, end, size);
+
+        if(1 == bootInfo->mmap_addr[i].Type) {
+            printk(" [usable]");
             pmm_add_memory_region(start, end);
         } else {
-            console_print(" [reserved]");
+            printk(" [reserved]");
         }
-        console_print("\n");
+        printk("\n");
     }
 
+    pmm_add_memory_region((unsigned int) &kernel_begin, (unsigned int) &kernel_end);
+    pmm_add_memory_region((unsigned int) &kernel_end, (unsigned int) &kernel_end + total_size / PMM_BLOCK_SIZE / 8);
     printk("Total found usable memory: %d bytes\n", pmm_get_memory_size());
 }
 
@@ -74,10 +70,7 @@ void kmain(int * s)
     console_cls();
     
     cpuid();
-    printk("Dada v0.0.1\n");
-    printk("Running on %s\n", cpu_name);
-    printk("Kernel size: %u\n", kernel_size);
-    printk("Kernel range: 0x%x - 0x%x\n\n", &kernel_begin, &kernel_end);
+    printk("Dada v0.0.1 | CPU:  %s | %u | 0x%x - 0x%x\n", cpu_name, kernel_size, &kernel_begin, &kernel_end);
 
     show_memory_map(bi);
 
@@ -97,35 +90,24 @@ void kmain(int * s)
     printk("BIOS reported higher memory: %u KB\n", bi->memhigh );
      
     setup_gdt();
-    printk("GDT installed.\n");
     setup_idt();
-    printk("IDT installed.\n");
     remap_pic();
-    printk("PIC remapped.\n");
     setup_irq_gates();
     flash_idt();
-    printk("IRQ handlers installed.\n");
-    asm volatile("sti");
-    printk("Interrupts enabled!\n");
 
     pmm_print_summary();
-    //unmaskIRQ(0x08);
-    //asm volatile("sti");  
 
-    /*asm volatile("int $0x4");
-    asm volatile("int $0x6");
-    asm volatile("int $0x5");
-    asm volatile("int $0x7");
-    asm volatile("int $0x3");
-    asm volatile("int $0xD");
-    asm volatile("int $0xD");
-    asm volatile("int $0xD");
-    asm volatile("int $0xD");
-    asm volatile("int $0xD");
-    asm volatile("int $0x3");
-    asm volatile("int $0x2");
-    asm volatile("int $0x1");*/
-    //asm volatile("int $0xbd");
-    //asm volatile("int $0xaf");
-    //int x = 2/0;
+    unmaskIRQ(1);
+    asm volatile("sti");
+    //asm volatile("int $0x1");
+    
+    printk("===================================\n");
+    //experiment();
+    printk("===================================\n");
+
+    pmm_set_block(0, 1);
+    pmm_set_block(2, 1);
+    pmm_dump_mm();
 }
+
+

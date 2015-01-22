@@ -5,6 +5,7 @@
  * Wiktor Lukasik (wiktor@lukasik.org)
  */
 
+#include "console.h"
 #include "sys.h"
 
 void cpuid() {
@@ -38,4 +39,18 @@ unsigned char inportb(unsigned short port) {
     unsigned char rv;
     asm volatile ("inb %1, %0" : "=a" (rv) : "dN" (port));
     return rv;
+}
+
+void panic(char * msg) {
+    if(msg != 0) {
+        printk("PANIC MESSAGE: %s\n", msg);
+    }
+
+    halt_and_catch_fire();
+}
+
+void halt_and_catch_fire() {
+    printk("SYSTEM HALTED!");
+    // TODO: come up with a more definitive kill method.
+    for(;;) {}
 }

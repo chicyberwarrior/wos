@@ -9,7 +9,7 @@
 #define COLOR_CYAN 3
 #define COLOR_RED 4
 #define COLOR_MAGENTA 5
-#define COLOR_BROWN 6
+#define COLOR_BROWN 7
 #define COLOR_LIGHT_GRAY 7
 #define COLOR_DARK_GRAY 8
 #define COLOR_LIGHT_BLUE 9
@@ -51,7 +51,7 @@ int printk(const char *format, ...);
 
 /* Serial port output */
 void write_serial(char a);
-
+int log(const char *format, ...);
 /* Logging */
 #define LOG_TO_CONSOLE 
 #define CONSOLE_TO_LOG

@@ -67,25 +67,12 @@ void kmain(int * s)
 
     /* Point multi boot info structure to whatever is at EBX (set up by loader) */
     struct mbootinfo * bi = (struct mbootinfo *) s;
+
     console_cls();
-    
     cpuid();
     printk("Dada v0.0.1 | CPU:  %s | %u | 0x%x - 0x%x\n", cpu_name, kernel_size, &kernel_begin, &kernel_end);
-
     show_memory_map(bi);
-
-    /* Print some system info */
-
-    /* Dump contents of registers */
-    console_print("Stack: "); 
-    console_printhex((int) &_stack_bottom);
-    console_printchr('-'); 
-    console_printhex((int) &_stack_top);
-    console_print(" ("); 
-    console_printnum(&_stack_top - &_stack_bottom); 
-    console_print(" bytes)");
-    console_printchr('\n');
-
+    printk("Stack: 0x%x - 0x%x (%d bytes)\n", &_stack_bottom, &_stack_top, &_stack_top - &_stack_bottom);
     printk("BIOS reported lower memory: %u KB\n", bi->memlow );
     printk("BIOS reported higher memory: %u KB\n", bi->memhigh );
      
@@ -105,9 +92,9 @@ void kmain(int * s)
     //experiment();
     printk("===================================\n");
 
-    pmm_set_block(0, 1);
-    pmm_set_block(2, 1);
-    pmm_dump_mm();
+    //pmm_set_block(0, 1);
+    //pmm_set_block(2, 1);
+    //pmm_dump_mm();
 }
 
 
